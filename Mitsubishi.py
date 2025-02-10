@@ -1,23 +1,29 @@
 import streamlit as st
 import folium
 from folium.plugins import MarkerCluster
-from streamlit_folium import st_folium  # Using st_folium to render the map
+from streamlit_folium import st_folium
 import pandas as pd
 import plotly.express as px
 import numpy as np
 import datetime
+from PIL import Image
+
+# Load Mitsubishi logo
+# Ensure that "mitsubishi_logo2.png" is in the same folder as this script or update the path accordingly.
+mitsubishi_logo = Image.open("mitsubishi_logo2.png")
 
 # ---------------------------
 # Page configuration and custom CSS
 st.set_page_config(
     page_title="Mitsubishi",
-    page_icon="🚗",
+    page_icon=mitsubishi_logo,  # Set Mitsubishi logo as the page icon
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.markdown("""
     <style>
+        /* Button styling */
         .stButton > button {
             transition: all 0.3s ease;
             border-radius: 8px;
@@ -26,9 +32,27 @@ st.markdown("""
             transform: scale(1.05);
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
+        /* Sidebar styling */
         .sidebar .sidebar-content {
-            background-image: linear-gradient(#2e7bcf, #2e7bcf);
+            background-image: linear-gradient(#2e7bcf, #1e5aa7);
             color: white;
+            font-size: 16px;
+        }
+        /* Force images in the sidebar to have transparent background */
+        .sidebar .sidebar-content img {
+            background-color: transparent !important;
+        }
+        /* Summary Card: transparent background so it matches the dashboard */
+        .summary-card {
+            background-color: transparent;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        /* Force any iframe (e.g. the folium map) to take full width */
+        iframe {
+            width: 100% !important;
+            max-width: 100% !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -37,6 +61,7 @@ st.markdown("""
 # Flotta: Map with 13 example heatpumps
 def flotta():
     st.header("Flotta")
+
     # Example data for 13 heatpumps across Italy
     data = {
         "City": ["Rome", "Milan", "Naples", "Turin", "Palermo", "Bologna",
@@ -51,20 +76,39 @@ def flotta():
     fleet_data = pd.DataFrame(data)
     
     # Create a Folium map centered on Italy
-    m = folium.Map(location=[41.87194, 12.56738], zoom_start=6)
+    m = folium.Map(location=[41.87194, 17.89938], zoom_start=6)
     marker_cluster = MarkerCluster().add_to(m)
     
-    # Add markers for each heatpump
+    # Add markers for each device with color based on status
     for idx, row in fleet_data.iterrows():
+        color = "green" if row["Status"] == "Active" else "red" if row["Status"] == "Inactive" else "orange"
         popup_text = f"{row['City']} - {row['Status']}"
         folium.Marker(
             location=[row["Latitude"], row["Longitude"]],
             popup=popup_text,
-            tooltip=row["City"]
+            tooltip=row["City"],
+            icon=folium.Icon(color=color)
         ).add_to(marker_cluster)
     
-    st.subheader("Flotta Localization")
-    st_folium(m, width=700, height=500)
+    st.subheader("Fleet Localization")
+    # Remove the columns so that the map spans the entire page width
+    # Also, setting a high width (e.g., 1400) together with CSS ensures full-width display
+    st_folium(m, width=1400, height=500)
+
+    #st.write("---")  # Horizontal line separator
+
+    # Summary Metrics for the fleet
+    total_devices = len(fleet_data)
+    active_devices = len(fleet_data[fleet_data["Status"] == "Active"])
+    maintenance_devices = len(fleet_data[fleet_data["Status"] == "Maintenance"])
+    inactive_devices = len(fleet_data[fleet_data["Status"] == "Inactive"])
+    
+    # Display KPI cards
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Devices", total_devices)
+    col2.metric("Active", active_devices)
+    col3.metric("Maintenance", maintenance_devices)
+    col4.metric("Inactive", inactive_devices)
 
 # ---------------------------
 # Analytics: Charts for Power Consumption, Temperatura and Anomaly Detection
@@ -78,12 +122,15 @@ def analytics():
     st.write(f"Analytics for device: {device}")
     device_seed = hash(device) % 2**32
     
-    # Generate time series data for the past 24 hours using device-specific seeds
+    # Date range selection
+    date_range = st.date_input("Select Date Range", [datetime.date.today() - datetime.timedelta(days=7), datetime.date.today()])
+    
+    # Generate time series data for the selected date range using device-specific seeds
     np.random.seed(device_seed)
-    time_range = pd.date_range(end=datetime.datetime.now(), periods=24, freq='h')
+    time_range = pd.date_range(start=date_range[0], end=date_range[1], freq='h')
     
     # --- Power Consumption (kW) dummy data ---
-    power_values = 10 + 2 * np.sin(np.linspace(0, 2*np.pi, 24)) + np.random.normal(scale=1, size=24)
+    power_values = 10 + 2 * np.sin(np.linspace(0, 2*np.pi, len(time_range))) + np.random.normal(scale=1, size=len(time_range))
     df_power = pd.DataFrame({
         "Time": time_range,
         "Power Consumption (kW)": power_values
@@ -91,8 +138,8 @@ def analytics():
     
     # --- Temperatura (°C) dummy data ---
     np.random.seed(device_seed + 1)
-    temp_mandata = 60 + np.random.normal(scale=2, size=24)
-    temp_ritorno = 50 + np.random.normal(scale=2, size=24)
+    temp_mandata = 60 + np.random.normal(scale=2, size=len(time_range))
+    temp_ritorno = 50 + np.random.normal(scale=2, size=len(time_range))
     df_temp = pd.DataFrame({
         "Time": time_range,
         "Temperatura di mandata": temp_mandata,
@@ -102,7 +149,7 @@ def analytics():
     
     # --- Anomaly Detection (m/s) dummy data ---
     np.random.seed(device_seed + 2)
-    anomaly_values = 3 + np.random.normal(scale=0.3, size=24)
+    anomaly_values = 3 + np.random.normal(scale=0.3, size=len(time_range))
     df_anomaly = pd.DataFrame({
         "Time": time_range,
         "Anomaly Detection (m/s)": anomaly_values
@@ -167,6 +214,16 @@ def report():
     
     kpi = get_device_kpi(device)
     
+    # Summary Card with transparent background so it matches the dashboard
+    st.markdown("""
+        <div class="summary-card">
+            <h3>Summary</h3>
+            <p>Total Hours of Work: <strong>{}</strong></p>
+            <p>Alerts: <strong>{}</strong></p>
+            <p>Total Consumption: <strong>{} kWh</strong></p>
+        </div>
+    """.format(kpi["Total hours of work"], kpi["Alerts"], kpi["Total consumption (kWh)"]), unsafe_allow_html=True)
+    
     col1, col2, col3 = st.columns(3)
     col1.metric("Total hours of work", kpi["Total hours of work"])
     col2.metric("Alerts", kpi["Alerts"])
@@ -192,6 +249,8 @@ def report():
 # ---------------------------
 # Main function with sidebar navigation
 def main():
+    # Display the Mitsubishi logo at full width in the sidebar
+    st.sidebar.image(mitsubishi_logo, use_container_width=True)
     st.sidebar.title("Mitsubishi - PDC Tracking")
     section = st.sidebar.radio("Select Section", ["Flotta", "Analytics", "Report"])
     
