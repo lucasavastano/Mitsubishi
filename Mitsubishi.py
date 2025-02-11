@@ -10,7 +10,7 @@ from PIL import Image
 
 # Load Mitsubishi logo
 # Ensure that "mitsubishi_logo2.png" is in the same folder as this script or update the path accordingly.
-mitsubishi_logo = Image.open("mitsubishi_logo2.png")
+mitsubishi_logo = Image.open("mitsubishi_logo3.png")
 
 # ---------------------------
 # Page configuration and custom CSS
